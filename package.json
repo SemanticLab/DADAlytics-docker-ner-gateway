@@ -1,0 +1,25 @@
+{
+  "name": "dadalytics-docker-ner-gateway",
+  "version": "1.0.0",
+  "description": "REST server to interact with multiple NER services",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SemanticLab/DADAlytics-docker-ner-gateway.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/SemanticLab/DADAlytics-docker-ner-gateway/issues"
+  },
+  "homepage": "https://github.com/SemanticLab/DADAlytics-docker-ner-gateway#readme",
+  "dependencies": {
+    "async": "^2.5.0",
+    "body-parser": "^1.18.2",
+    "express": "^4.16.2",
+    "request": "^2.83.0"
+  }
+}
