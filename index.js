@@ -34,17 +34,17 @@ app.post('/', function(req, res) {
 
 
 		if (tool=='stanford'){
-			request({url:`${address}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+			request({url:`${tool}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
 				if (err) { console.log(err); res.status(500).json({process:'stanford', text: text, error: err}); return false; }
 				res.status(200).json(body);
 			});
 		}else if (tool=='opener'){
-			request({url:`${address}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+			request({url:`${tool}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
 				if (err) { console.log(err); res.status(500).json({process:'opener', text: text, error: err}); return false; }
 				res.status(200).json(body);
 			});
 		}else if (tool=='spotlight'){
-			request({url:`${address}:${config[tool]}/rest/annotate`, json: true, method:'POST', form: {text:text, confidence:"0.75","support":20} }, function(err,httpResponse,body){ 
+			request({url:`${tool}:${config[tool]}/rest/annotate`, json: true, method:'POST', form: {text:text, confidence:"0.75","support":20} }, function(err,httpResponse,body){ 
 				if (err) { console.log(err); res.status(500).json({process:'spotlight', text: text, error: err}); return false; }
 				res.status(200).json(body);
 			});			
