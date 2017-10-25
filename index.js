@@ -2,10 +2,12 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const async = require('async');
 const request = require('request');
+var cors = require('cors');
 
 
 var app = express();
 app.use(bodyParser.json({limit: '50mb'}));
+app.use(cors());
 
 var port = process.argv[2] || 80;
 
