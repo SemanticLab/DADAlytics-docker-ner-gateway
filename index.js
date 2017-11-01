@@ -15,7 +15,7 @@ var address = 'http://localhost'
 var config = {
 	'stanford': '9000',
 	'opener': '9001',
-	'spotlight': '9002',
+	'spotlight': '80',
 }
 
 
@@ -26,6 +26,21 @@ var server = app.listen(port, function () {
 
 });
 
+function format(seconds){
+  function pad(s){
+    return (s < 10 ? '0' : '') + s;
+  }
+  var hours = Math.floor(seconds / (60*60));
+  var minutes = Math.floor(seconds % (60*60) / 60);
+  var seconds = Math.floor(seconds % 60);
+
+  return pad(hours) + ':' + pad(minutes) + ':' + pad(seconds);
+}
+
+app.get('/ping', function(req, res) {
+	res.status(200).json({uptime:format(process.uptime())});
+
+})
 app.post('/', function(req, res) {
 		var parsed = '';
 		var nerPort = 8000;
