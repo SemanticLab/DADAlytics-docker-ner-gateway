@@ -1,12 +1,28 @@
-FROM node:8
+FROM node:4.4.5
+MAINTAINER Tony OHagan <tony@ohagan.name>
 
-ADD index.js package-lock.json package.json ./
-RUN npm install && npm install -g forever
+ENV APPDIR /usr/src/app
 
-EXPOSE 80
+RUN mkdir -p $APPDIR
+WORKDIR $APPDIR
 
+# Install APPDIR dependencies
+COPY package.json $APPDIR
 
-CMD ["forever", "index.js"]
+ENV NODE_ENV production
+RUN npm -q install
 
+COPY . $APPDIR
+RUN chown -R nobody:nogroup $APPDIR && chmod -R a-w $APPDIR && ls -ld
 
+# Certs
+RUN mkdir -p /etc/certs/prod /etc/certs/staging
+VOLUME /etc/certs
 
+USER nobody
+
+# Ports > 1024 since we're not root.
+EXPOSE 8080 8443 5001
+
+ENTRYPOINT ["node"]
+CMD ["./server.js"]
