@@ -7,7 +7,7 @@ module.exports = {
     prod: process.env.SSL_PROD === 'true', // if false, provisions (untrusted) SSL certs to avoid 5 certs/week/domain limit.
     plainPorts: [8080],         // Map to 80
     tlsPorts: [8443, 8001],     // Map to 443 and 5001
-    // certsDir: '/etc/certs'      // Docker to persist certs.
-    certsDir: require('os').homedir() + '/.ssl_certs' // Use if developing on OSX/Linux
+    certsDir: '/etc/certs'      // Docker to persist certs.
+    // certsDir: require('os').homedir() + '/.ssl_certs' // Use if developing on OSX/Linux
   }
 };

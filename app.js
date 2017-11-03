@@ -3,8 +3,16 @@
 module.exports = function(sslRedirect) {
 
   // Bare bones Express server to test Docker
-  var express = require('express');
+  const express = require('express');
+  const bodyParser = require('body-parser');
+  const request = require('request');
+  const cors = require('cors');
   var app = express();
+
+  app.use(bodyParser.json({limit: '50mb'}));
+  app.use(cors());
+
+
 
   // Force HTTPS redirect unless we are using localhost or unit testing with superagent.
   function httpsRedirect(req, res, next) {
@@ -22,26 +30,71 @@ module.exports = function(sslRedirect) {
     app.use(httpsRedirect);
   }
 
-  app.get('/', function (req, res) {
-    res.send(
-      [
-        'Oh man! You would not believe where I\'ve been just now.',
-        'To bring you this warm intercontinental "Hello" greeting',
-        'I had to first have my text squeezed up, then climb into an SSL encrypted network tunnel',
-        '(to avoid the gruesome caching proxies and "middle man" attackers) jump through endless routers and ',
-        'those evil switches that chopped me up into smaller packets',
-        'only to get encoded again into a light beam and travel at near light speed underneath thousands of kilometers of ocean',
-        'inside a tiny fibre optic tube before getting decoded back into electrons, then yet more switches and routers ',
-        'that reassembled my packets again and then safe inside your computer be decrypted, then un-squeezed and ',
-        'finally be splattered on your screen - all in a rather undignified font I should add !<br/>',
-        'Sigh ... The things I do to be together with you.'
-      ].join(' '));
+
+  var config = {
+    'stanford': '9000',
+    'opener': '9001',
+    'spotlight': '80',
+  }
+
+  function format(seconds){
+    function pad(s){
+      return (s < 10 ? '0' : '') + s;
+    }
+    var hours = Math.floor(seconds / (60*60));
+    var minutes = Math.floor(seconds % (60*60) / 60);
+    var seconds = Math.floor(seconds % 60);
+
+    return pad(hours) + ':' + pad(minutes) + ':' + pad(seconds);
+  }
+
+  app.get('/ping', function(req, res) {
+    res.status(200).json({uptime:format(process.uptime()), tools:Object.keys(config)});
+
+  })
+
+  app.get('/', function(req, res) {
+    res.redirect('https://semanticlab.github.io/DADAlytics-ner-demo/');
+  })
+
+  
+
+  app.post('/', function(req, res) {
+      var parsed = '';
+      var nerPort = 8000;
+      var text = req.body.text.replace(/\n+/gm, function myFunc(x){return' ';});
+      var tool = req.body.tool.replace(/\n+/gm, function myFunc(x){return' ';});
+
+
+      if (tool=='stanford'){
+        request({url:`http://${tool}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'stanford', text: text, error: err}); return false; }
+          res.status(200).json(body);
+        });
+      }else if (tool=='opener'){
+        request({url:`http://${tool}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'opener', text: text, error: err}); return false; }
+          res.status(200).json(body);
+        });
+      }else if (tool=='spotlight'){
+        request({url:`http://${tool}:${config[tool]}/rest/annotate`, json: true, method:'POST', form: {text:text, confidence:"0.75","support":20} }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'spotlight', text: text, error: err}); return false; }
+          res.status(200).json(body);
+        });     
+      }else{
+        res.status(200).json({error:true,msg:"unknown tool"});
+      }
+
+      // console.log(text)
+      // console.log(`${address}/rest/annotate:${config[tool]}`)
+
+
   });
 
-  app.get('/env', function (req, res) {
-    res.contentType('application/json');
-    res.send(process.env);
-  });
+  // app.get('/env', function (req, res) {
+  //   res.contentType('application/json');
+  //   res.send(process.env);
+  // });
   
   return app;
 
