@@ -7,6 +7,7 @@ module.exports = function(sslRedirect) {
   const bodyParser = require('body-parser');
   const request = require('request');
   const cors = require('cors');
+  const iconv = require('iconv-lite');
   var app = express();
 
   app.use(bodyParser.json({limit: '50mb'}));
@@ -32,8 +33,8 @@ module.exports = function(sslRedirect) {
 
 
   var config = {
-    'spacy' : '9005',
-    'parsey': '9004',
+    'spacy' : '80',
+    'parsey': '80',
     'nltk': '9003',
     'stanford': '9000',
     'opener': '9001',
@@ -101,10 +102,20 @@ module.exports = function(sslRedirect) {
           res.status(200).json(body);
         });        
       }else if (tool='parsey'){
+
+        var buff   = new Buffer(text, 'utf8');
+        text = iconv.decode(buff, 'ISO-8859-1');
+
         request({url:`http://${tool}:${config[tool]}`, method:'POST', headers: {'Content-Type': 'text/xml'}, body: text }, function(err,httpResponse,body){ 
           if (err) { console.log(err); res.status(500).json({process:'parsey', text: text, error: err}); return false; }
           if (body == 'error'){ console.log(err); res.status(500).json({process:'parsey', text: text, error: err}); return false; }
-          var results = JSON.parse(body)
+          
+          try{
+            var results = JSON.parse(body)
+          }catch(e){
+            res.status(500).json({error:true,msg:body});
+          }
+          
           var words = []
           var compelted_words = []
           var compelted_words_results = []
