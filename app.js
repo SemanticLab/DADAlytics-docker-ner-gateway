@@ -32,6 +32,9 @@ module.exports = function(sslRedirect) {
 
 
   var config = {
+    'spacy' : '9005',
+    'parsey': '9004',
+    'nltk': '9003',
     'stanford': '9000',
     'opener': '9001',
     'spotlight': '80',
@@ -62,6 +65,12 @@ module.exports = function(sslRedirect) {
   app.post('/', function(req, res) {
       var parsed = '';
       var nerPort = 8000;
+
+      if (!req.body.text){
+        res.status(204).json({error:true,msg:"no text"});
+        return
+      }
+
       var text = req.body.text.replace(/\n+/gm, function myFunc(x){return' ';});
       var tool = req.body.tool.replace(/\n+/gm, function myFunc(x){return' ';});
 
@@ -80,7 +89,87 @@ module.exports = function(sslRedirect) {
         request({url:`http://${tool}:${config[tool]}/rest/annotate`, json: true, method:'POST', form: {text:text, confidence:"0.75","support":20} }, function(err,httpResponse,body){ 
           if (err) { console.log(err); res.status(500).json({process:'spotlight', text: text, error: err}); return false; }
           res.status(200).json(body);
-        });     
+        });   
+      }else if (tool=='nltk'){
+        request({url:`http://${tool}:${config[tool]}`, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'nltk', text: text, error: err}); return false; }
+          res.status(200).json(body);
+        });
+      }else if (tool=='spacy'){
+        request({url:`http://${tool}:${config[tool]}/ent`, method:'POST',json: {text:text, model:"en"} }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'spacy', text: text, error: err}); return false; }
+          res.status(200).json(body);
+        });        
+      }else if (tool='parsey'){
+        request({url:`http://${tool}:${config[tool]}`, method:'POST', headers: {'Content-Type': 'text/xml'}, body: text }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'parsey', text: text, error: err}); return false; }
+          if (body == 'error'){ console.log(err); res.status(500).json({process:'parsey', text: text, error: err}); return false; }
+          var results = JSON.parse(body)
+          var words = []
+          var compelted_words = []
+          var compelted_words_results = []
+
+          for (var line in results){
+          for (var word in results[line]){
+            w = results[line][word]
+            if (w['feats'] && w['feats']['fPOS']){
+              if ((w['feats']['fPOS'] == 'PROPN++NNP' || w['feats']['fPOS'] == 'NOUN++NNS') && w['xpostag'] != 'NN' && w['xpostag'] != 'PRP' ){
+                if (w['form'][0] === w['form'][0].toUpperCase()){
+                  words.push(w) 
+                }
+                
+              }       
+            }
+          }
+          var compelted_ids = []
+          for (var word in words){
+
+
+            var w = words[word]
+            if (compelted_ids.indexOf(w['id'])>-1){
+              continue
+            }
+            var final_words = [w]
+
+            // see if this word continues
+            for (var word2 in words){
+              var w2 = words[word2]
+              if (w2['id'] != w['id'] && w2['id'] === w['id']+1){
+
+                final_words.push(w2)
+                compelted_ids.push(w2['id'])
+                if (/[,.?\-]/.test(w2['form'])) {
+                  break
+                }
+                w = w2
+              }
+
+            }
+            
+            // console.log(final_words)
+            if (final_words.length>0){
+              var word_string = ''
+              final_words.forEach((x)=>{
+                word_string = word_string + x['form'] + ' '
+              })
+              var clean_word_string = word_string.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g," ").replace(/\s+/,' ').trim()
+              if (compelted_words.indexOf(clean_word_string)===-1){
+                compelted_words.push(clean_word_string)
+                compelted_words_results.push({'clean':clean_word_string,'original':word_string.replace(/\s+/,' ').trim()})
+              }
+
+            }
+            
+            
+          }
+          
+
+          }
+          res.status(200).json({"results":compelted_words_results,"parsey":results})
+        });
+
+
+
       }else{
         res.status(200).json({error:true,msg:"unknown tool"});
       }
