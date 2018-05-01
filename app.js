@@ -7,19 +7,29 @@ module.exports = function(sslRedirect) {
   const bodyParser = require('body-parser');
   const request = require('request');
   const cors = require('cors');
-  const iconv = require('iconv-lite');
+  const ASCIIFolder = require("fold-to-ascii")
+
+  const async = require("async")
+
+
+
+  const parseUtil = require("./parse_util")
+  console.log(parseUtil)
+
   var app = express();
 
   app.use(bodyParser.json({limit: '50mb'}));
   app.use(cors());
 
 
+  var useTimeout = process.env.NER_TIMEOUT
+  if (!useTimeout) useTimeout = 25000
+
 
   // Force HTTPS redirect unless we are using localhost or unit testing with superagent.
   function httpsRedirect(req, res, next) {
     if (req.protocol === 'https'
       || req.header('X-Forwarded-Proto') === 'https'
-      || req.header('User-Agent').match(/^node-superagent/)
       || req.hostname === 'localhost') {
       return next();
     }
@@ -41,6 +51,9 @@ module.exports = function(sslRedirect) {
     'spotlight': '80',
   }
 
+
+
+
   function format(seconds){
     function pad(s){
       return (s < 10 ? '0' : '') + s;
@@ -61,17 +74,156 @@ module.exports = function(sslRedirect) {
     res.redirect('https://semanticlab.github.io/DADAlytics-ner-demo/');
   })
 
+  app.post('/compiled', function(req, res) {
+    
+    var text = req.body.text.replace(/\n+/gm, function myFunc(x){return' ';});
+    text = text.replace(/\n|\r/g,' ').replace(/\t/g,'')
+
+    var useTools = []
+    if (req.body.tool){
+      useTools = req.body.tool
+    }
+    
+    // do we have this tool
+    useTools = useTools.map((t)=>{
+      if (config[t]){
+        return t
+      }
+    })
+
+    if (useTools.length === 0){
+      res.status(204).json({error:true,msg:"no tool specified"});
+      return false
+    }
+    if (text.trim().length===0){
+      res.status(204).json({error:true,msg:"no text specified"});
+      return false
+    }
+    
+    // 
+    async.map(useTools, function(tool, cb) {
+
+      if (tool=='stanford'){
+        request({url:`http://${tool}:${config[tool]}`, timeout: useTimeout, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+          if (!err){
+            cb(null, {tool:tool,data:body,error:false,errorMsg:null});
+          }else{
+            cb(null, {tool:tool,data:null,error:true,errorMsg:err});
+          }
+
+        });
+      }else if (tool=='opener'){
+        request({url:`http://${tool}:${config[tool]}`, timeout: useTimeout, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+          if (!err){
+            cb(null, {tool:tool,data:body,error:false,errorMsg:null});
+          }else{
+            cb(null, {tool:tool,data:null,error:true,errorMsg:err});
+          }
+        });
+      }else if (tool=='spotlight'){
+        request({url:`http://${tool}:${config[tool]}/rest/annotate`, json: true, timeout: useTimeout, method:'POST', form: {text:text, confidence:"0.75","support":20} }, function(err,httpResponse,body){ 
+          if (!err){
+            cb(null, {tool:tool,data:body,error:false,errorMsg:null});
+          }else{
+            cb(null, {tool:tool,data:null,error:true,errorMsg:err});
+          }
+        });   
+      }else if (tool=='nltk'){
+        request({url:`http://${tool}:${config[tool]}`, timeout: useTimeout, method:'POST',json: {text:text} }, function(err,httpResponse,body){ 
+          if (!err){
+            cb(null, {tool:tool,data:body,error:false,errorMsg:null});
+          }else{
+            cb(null, {tool:tool,data:null,error:true,errorMsg:err});
+          }
+        });
+      }else if (tool=='spacy'){
+        request({url:`http://${tool}:${config[tool]}/ent`, timeout: useTimeout, method:'POST',json: {text:text, model:"en"} }, function(err,httpResponse,body){ 
+          if (!err){
+            cb(null, {tool:tool,data:body,error:false,errorMsg:null});
+          }else{
+            cb(null, {tool:tool,data:null,error:true,errorMsg:err});
+          }
+        });        
+      }else if (tool='parsey'){
+
+
+        text = text.replace(/\n|\r/g,' ').replace(/\t/g,'')
+        text = text.replace(/['"’”“]+/g, '')
+        var sentences = text.match(/\(?[^\.\?\!]+[\.!\?]\)?/g).map((s)=>{return s.trim()})
+        text = sentences.join('\n')
+
+        var foldLookup = {}
+        var newText = []
+        text.split(' ').forEach((word)=>{
+          let t = ASCIIFolder.fold(word)
+          foldLookup[t] = word
+          newText.push(t)
+        })
+        newText = newText.join(' ')
+
+
+
+        request({url:`http://${tool}:${config[tool]}`, timeout: useTimeout, method:'POST', headers: {'Content-Type': 'text/plain'}, body: newText }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'parsey', text: newText, error: err}); return false; }
+          if (body == 'error'){ console.log(err); res.status(500).json({process:'parsey', text: newText, error: err}); return false; }
+
+          try{
+            var results = JSON.parse(body)
+          }catch(e){
+            cb(null, {tool:tool,data:null,error:true,errorMsg:err});
+            return false
+          }
+
+
+          var compelted_words_results = parseUtil.nerParsey(results,foldLookup)
+
+
+
+
+          // console.log(compelted_words_results)
+          cb(null, {tool:tool,data:compelted_words_results,error:false,errorMsg:null});
+
+
+        });
+      }
+
+
+    }, function(err, results) {
+      var compiledResults = []
+      var errors = []
+      var errorTools = []
+      var map = {"spacy":parseUtil.parseSpacy,"parsey":parseUtil.parseParsey,"nltk":parseUtil.parseNltk,"stanford":parseUtil.parseStanford,"opener":parseUtil.parseOpener,"spotlight":parseUtil.parseSpotlight}
+      results.forEach((r)=>{
+        if (r.error){
+          errors.push(`Error with ${r.tool}: ${JSON.stringify(r.errorMsg)}`)
+          errorTools.push(r.tool)
+          return
+        }
+        if (map[r.tool]){
+          compiledResults.push({'tool':r.tool, 'data':map[r.tool](r.data)})
+        }
+      })
+      compiledResults = parseUtil.combineData(compiledResults)
+      var hasError = false
+      if (errors.length>0) hasError = true
+      res.status(200).json({results:compiledResults,hasError:hasError,errors:errors,errorTools:errorTools})
+    });
+
+
+
+  })
   
 
   app.post('/', function(req, res) {
       var parsed = '';
-      var nerPort = 8000;
+
 
       if (!req.body.text){
         res.status(204).json({error:true,msg:"no text"});
         return
       }
 
+      // var textWithBreaks = req.body.text;
       var text = req.body.text.replace(/\n+/gm, function myFunc(x){return' ';});
       var tool = req.body.tool.replace(/\n+/gm, function myFunc(x){return' ';});
 
@@ -103,80 +255,41 @@ module.exports = function(sslRedirect) {
         });        
       }else if (tool='parsey'){
 
-        var buff   = new Buffer(text, 'utf8');
-        text = iconv.decode(buff, 'ISO-8859-1');
 
-        request({url:`http://${tool}:${config[tool]}`, method:'POST', headers: {'Content-Type': 'text/xml'}, body: text }, function(err,httpResponse,body){ 
-          if (err) { console.log(err); res.status(500).json({process:'parsey', text: text, error: err}); return false; }
-          if (body == 'error'){ console.log(err); res.status(500).json({process:'parsey', text: text, error: err}); return false; }
-          
+        text = text.replace(/\n|\r/g,' ').replace(/\t/g,'')
+        text = text.replace(/['"’”“]+/g, '')
+        var sentences = text.match(/\(?[^\.\?\!]+[\.!\?]\)?/g).map((s)=>{return s.trim()})
+        text = sentences.join('\n')
+
+        var foldLookup = {}
+        var newText = []
+        text.split(' ').forEach((word)=>{
+          let t = ASCIIFolder.fold(word)
+          foldLookup[t] = word
+          newText.push(t)
+        })
+        newText = newText.join(' ')
+
+
+
+        request({url:`http://${tool}:${config[tool]}`, method:'POST', headers: {'Content-Type': 'text/plain'}, body: newText }, function(err,httpResponse,body){ 
+          if (err) { console.log(err); res.status(500).json({process:'parsey', text: newText, error: err}); return false; }
+          if (body == 'error'){ console.log(err); res.status(500).json({process:'parsey', text: newText, error: err}); return false; }
+
           try{
             var results = JSON.parse(body)
           }catch(e){
+            console.log(e)
             res.status(500).json({error:true,msg:body});
+            return false
           }
           
-          var words = []
-          var compelted_words = []
-          var compelted_words_results = []
+          var compelted_words_results = parseUtil.nerParsey(results,foldLookup)
 
-          for (var line in results){
-          for (var word in results[line]){
-            w = results[line][word]
-            if (w['feats'] && w['feats']['fPOS']){
-              if ((w['feats']['fPOS'] == 'PROPN++NNP' || w['feats']['fPOS'] == 'NOUN++NNS') && w['xpostag'] != 'NN' && w['xpostag'] != 'PRP' ){
-                if (w['form'][0] === w['form'][0].toUpperCase()){
-                  words.push(w) 
-                }
-                
-              }       
-            }
-          }
-          var compelted_ids = []
-          for (var word in words){
-
-
-            var w = words[word]
-            if (compelted_ids.indexOf(w['id'])>-1){
-              continue
-            }
-            var final_words = [w]
-
-            // see if this word continues
-            for (var word2 in words){
-              var w2 = words[word2]
-              if (w2['id'] != w['id'] && w2['id'] === w['id']+1){
-
-                final_words.push(w2)
-                compelted_ids.push(w2['id'])
-                if (/[,.?\-]/.test(w2['form'])) {
-                  break
-                }
-                w = w2
-              }
-
-            }
-            
-            // console.log(final_words)
-            if (final_words.length>0){
-              var word_string = ''
-              final_words.forEach((x)=>{
-                word_string = word_string + x['form'] + ' '
-              })
-              var clean_word_string = word_string.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g," ").replace(/\s+/,' ').trim()
-              if (compelted_words.indexOf(clean_word_string)===-1){
-                compelted_words.push(clean_word_string)
-                compelted_words_results.push({'clean':clean_word_string,'original':word_string.replace(/\s+/,' ').trim()})
-              }
-
-            }
-            
-            
-          }
-          
-
-          }
+          // console.log(compelted_words_results)
           res.status(200).json({"results":compelted_words_results,"parsey":results})
+
+
         });
 
 
