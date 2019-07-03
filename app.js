@@ -38,7 +38,10 @@ module.exports = function(sslRedirect) {
   }
 
   if (sslRedirect) {
+    console.log('Using redirect')
     app.use(httpsRedirect);
+  }else{
+    console.log('NOT Using redirect')
   }
 
 
@@ -52,7 +55,9 @@ module.exports = function(sslRedirect) {
   }
 
 
+  var lastReqTime = Math.floor(+ new Date() / 1000)
 
+  
 
   function format(seconds){
     function pad(s){
@@ -70,11 +75,21 @@ module.exports = function(sslRedirect) {
 
   })
 
+  app.get('/idle', function(req, res) {
+    res.status(200).json({idel: (Math.floor(+ new Date() / 1000) - lastReqTime )  });
+  })
+
   app.get('/', function(req, res) {
-    res.redirect('https://semanticlab.github.io/DADAlytics-ner-demo/');
+    if (process.env.DADASERVER){
+      res.redirect('https://semanticlab.github.io/DADAlytics-ner-demo/');
+    }else{
+      res.status(200).json({uptime:format(process.uptime()), tools:Object.keys(config)});
+    }
   })
 
   app.post('/compiled', function(req, res) {
+
+    lastReqTime = Math.floor(+ new Date() / 1000)
     
     var text = req.body.text.replace(/\n+/gm, function myFunc(x){return' ';});
     text = text.replace(/\n|\r/g,' ').replace(/\t/g,'')
@@ -217,6 +232,7 @@ module.exports = function(sslRedirect) {
   app.post('/', function(req, res) {
       var parsed = '';
 
+      lastReqTime = Math.floor(+ new Date() / 1000)
 
       if (!req.body.text){
         res.status(204).json({error:true,msg:"no text"});

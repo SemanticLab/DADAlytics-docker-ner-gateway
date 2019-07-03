@@ -22,7 +22,6 @@
     "cors": "^2.8.4",
     "express": "4.13.4",
     "fold-to-ascii": "^4.0.0",
-    "letsencrypt-express": "1.1.5",
     "request": "^2.83.0"
   }
 }
