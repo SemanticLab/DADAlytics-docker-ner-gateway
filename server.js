@@ -16,8 +16,8 @@ console.log(JSON.stringify(config));
 
 if (config.enabled) {
 
-  var key = fs.readFileSync(config.certPath);
-  var cert = fs.readFileSync(config.keyPath);
+  var key = fs.readFileSync(config.keyPath);
+  var cert = fs.readFileSync(config.certPath);
 
   var credentials = {
     key: key,
@@ -38,7 +38,7 @@ if (config.enabled) {
 
   config.tlsPorts.forEach(function(port) {
 
-    httpsServer.listen(httpsPort, () => {
+    httpsServer.listen(port, () => {
       console.log("Https server listing on port : " + port)
     });
 
